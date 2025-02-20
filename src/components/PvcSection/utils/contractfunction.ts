@@ -53,6 +53,55 @@ function handleContractError(error: ContractError) {
     console.error("Unexpected error:", error);
   }
 }
+
+// Function to deposit tokens to the treasury
+export const depositToTreasury = async (
+  tokenAddress: string,
+  amount: string
+): Promise<{ success: boolean; txHash?: string; error?: string }> => {
+  try {
+    const { signer, contract } = await setupContractWithSigner();
+
+    // Create token contract instance
+    const tokenContract = new ethers.Contract(
+      tokenAddress,
+      [
+        "function approve(address spender, uint256 amount) external returns (bool)",
+        "function balanceOf(address owner) external view returns (uint256)",
+      ],
+      signer
+    );
+
+    // Convert amount to the correct token decimals (18 decimals)
+    const amountInWei = ethers.parseUnits(amount, 18);
+
+    // Check balance
+    const balance = await tokenContract.balanceOf(await signer.getAddress());
+    if (balance.lt(amountInWei)) {
+      throw new Error("Insufficient token balance");
+    }
+
+    // Approve tokens
+    const approveTx = await tokenContract.approve(ADDRESS, amountInWei);
+    await approveTx.wait();
+
+    // Call the depositERC20 function
+    const depositTx = await contract.depositERC20(tokenAddress, amountInWei);
+    const receipt = await depositTx.wait();
+
+    return {
+      success: true,
+      txHash: receipt.transactionHash,
+    };
+  } catch (error: any) {
+    console.error("Error depositing to treasury:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to deposit to treasury",
+    };
+  }
+};
+
 // Function to monitor bet status
 export const getBetStatus = async (requestId: string) => {
   try {
