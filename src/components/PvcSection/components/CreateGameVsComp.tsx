@@ -58,7 +58,11 @@ const FlipCoin = () => {
       console.log("Address:", userAddress);
       return { signer, contract };
     } catch (error) {
-      console.error("Error setting up contract with signer:", error.message);
+      // console.error("Error setting up contract with signer:", error.message);
+      console.error(
+        "Error setting up contract with signer:",
+        (error as Error).message
+      );
       throw error;
     }
   }
