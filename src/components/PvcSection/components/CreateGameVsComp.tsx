@@ -42,10 +42,10 @@ const FlipCoin = () => {
     result: string | null;
   }>({ won: null, result: null });
 
-  // SetupContract
+  // [Previous logic remains unchanged: setupContract, flip, getBetStatus, fetchTokenBalance, useEffect hooks, handleFlipCoin, validateInput, etc.]
+
   async function setupContract() {
     try {
-      // Check if the user is disconnected
       if (!isConnected) throw new Error("User is disconnected");
       const ethersProvider = new BrowserProvider(
         walletProvider as unknown as ethers.Eip1193Provider
@@ -53,20 +53,18 @@ const FlipCoin = () => {
       const signer = await ethersProvider.getSigner();
       const userAddress = await signer.getAddress();
       console.log("Address:", userAddress);
-      // The Contract object
       const contract = new ethers.Contract(ADDRESS, ABI, signer);
-      console.log("Address:", userAddress);
       return { signer, contract };
     } catch (error) {
       if (error instanceof Error) {
         console.error("Error setting up contract with signer:", error.message);
-      } else {
-        console.error("Error setting up contract with signer:", error);
+        throw error;
       }
-
-      throw error;
+      console.error("Unknown error setting up contract:", error);
+      throw new Error("Failed to setup contract");
     }
   }
+
   const flip = async (
     tokenAddress: string,
     tokenAmount: string,
@@ -74,11 +72,8 @@ const FlipCoin = () => {
   ) => {
     try {
       const { signer, contract } = await setupContract();
-
-      // Convert betAmount to the correct token decimals
       const tokenAmountInWei = ethers.parseUnits(tokenAmount, 18);
 
-      // Create token contract instance
       const tokenContract = new ethers.Contract(
         tokenAddress,
         [
@@ -89,7 +84,6 @@ const FlipCoin = () => {
         signer
       );
 
-      // Check balance
       const balance = await tokenContract.balanceOf(await signer.getAddress());
       if (balance < tokenAmountInWei) {
         throw new Error("Insufficient token balance");
@@ -98,12 +92,9 @@ const FlipCoin = () => {
       const approveTx = await tokenContract.approve(ADDRESS, tokenAmountInWei);
       await approveTx.wait();
 
-      // Send the flip transaction
       const tx = await contract.flip(face, tokenAddress, tokenAmountInWei);
-
       const receipt = await tx.wait();
 
-      // Get the requestId from the event
       const betSentEvent = receipt.logs
         .map((log: any) => {
           try {
@@ -116,13 +107,14 @@ const FlipCoin = () => {
 
       const requestId = betSentEvent ? betSentEvent.args.requestId : null;
 
-      return {
-        receipt,
-        requestId,
-      };
+      return { receipt, requestId };
     } catch (error) {
-      console.error("Error in flip function:", error);
-      throw error;
+      if (error instanceof Error) {
+        console.error("Error in flip function:", error.message);
+        throw error;
+      }
+      console.error("Unknown error in flip function:", error);
+      throw new Error("Failed to flip coin");
     }
   };
 
@@ -132,12 +124,15 @@ const FlipCoin = () => {
       const status = await contract.getBetStatus(requestId);
       return status;
     } catch (error) {
-      console.error("Error getting bet status:", error);
-      throw error;
+      if (error instanceof Error) {
+        console.error("Error getting bet status:", error.message);
+        throw error;
+      }
+      console.error("Unknown error getting bet status:", error);
+      throw new Error("Failed to get bet status");
     }
   };
 
-  // Fetch token balance
   const fetchTokenBalance = useCallback(async () => {
     if (!address || !state.tokenAddress || !isConnected) return;
 
@@ -164,7 +159,6 @@ const FlipCoin = () => {
       }));
     } catch (error) {
       console.error("Error fetching token balance:", error);
-      // Optionally, switch to fallback provider here
     }
   }, [address, state.tokenAddress, isConnected]);
 
@@ -203,33 +197,29 @@ const FlipCoin = () => {
 
             setState((prev) => ({
               ...prev,
-              success: "Flip completed",
+              success: "Game completed",
               loading: false,
             }));
 
             setIsFlipping(false);
-
-            // Refresh token balance
             fetchTokenBalance();
           }
         } catch (error) {
-          console.error("Error checking bet status:", error);
           clearInterval(intervalId);
           setState((prev) => ({
             ...prev,
             error: "Error checking bet status",
             loading: false,
           }));
+          setIsFlipping(false);
         }
-      }, 2000); // Poll every 2 seconds
+      }, 2000);
     }
 
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
+      if (intervalId) clearInterval(intervalId);
     };
-  }, [requestId]);
+  }, [requestId, fetchTokenBalance]);
 
   const handleFlipCoin = async () => {
     const validationError = validateInput();
@@ -253,14 +243,12 @@ const FlipCoin = () => {
         state.tokenAmount,
         state.face
       );
-
       setRequestId(newRequestId);
-    } catch (error: any) {
-      console.error("Error flipping coin:", error);
-      let errorMessage = "Failed to flip coin";
-      if (error.message?.includes("Token not allowed")) {
-        errorMessage = "This token is not allowed for betting";
-      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error && error.message.includes("Token not allowed")
+          ? "This token is not allowed for betting"
+          : "Failed to flip coin";
       setState((prev) => ({
         ...prev,
         error: errorMessage,
@@ -278,7 +266,6 @@ const FlipCoin = () => {
     <div className="min-h-screen bg-gradient-to-br from-purple-950 via-purple-900 to-purple-950">
       <div className="bg-[radial-gradient(circle_at_center,_rgba(88,28,135,0.15),_transparent_70%)] min-h-screen p-6 space-y-4">
         <appkit-button size="sm" balance="show" />
-        {/* Error/Success Notifications */}
         {state.error && (
           <div className="fixed top-4 right-4 bg-red-500/90 text-white px-4 py-2 rounded-md shadow-lg z-50 animate-fade-in">
             {state.error}
@@ -290,17 +277,15 @@ const FlipCoin = () => {
           </div>
         )}
 
-        {/* Flipping Animation */}
         {isFlipping && (
           <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
             <div className="bg-white p-10 rounded-lg shadow-lg">
               <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-purple-500"></div>
-              <p className="mt-4 text-center">Flipping Coin...</p>
+              <p className="mt-4 text-center">Flipping...</p>
             </div>
           </div>
         )}
 
-        {/* Flip Result */}
         {flipResult.won !== null && (
           <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
             <div className="bg-white p-10 rounded-lg shadow-lg">
@@ -309,7 +294,10 @@ const FlipCoin = () => {
               </h2>
               <p>{flipResult.result}</p>
               <button
-                onClick={() => setFlipResult({ won: null, result: null })}
+                onClick={() => {
+                  setFlipResult({ won: null, result: null });
+                  setState((prev) => ({ ...prev, success: null }));
+                }}
                 className="mt-4 bg-purple-500 text-white px-4 py-2 rounded"
               >
                 Close
@@ -323,7 +311,7 @@ const FlipCoin = () => {
             <div className="space-y-4">
               <div className="flex justify-center items-center w-full h-full">
                 <div
-                  className={`w-24 h-24 rounded-full bg-gradient-to-br from-purple-600 to-purple-800 relative ${
+                  className={`w-24 h-24 rounded-full relative ${
                     isFlipping ? "animate-spin" : ""
                   }`}
                   style={{
@@ -333,7 +321,7 @@ const FlipCoin = () => {
                   onClick={handleChoiceClick}
                 >
                   <div
-                    className="absolute w-full h-full backface-hidden bg-gradient-to-br from-purple-500 to-purple-700 rounded-full flex items-center justify-center shadow-lg"
+                    className="absolute w-full h-full backface-hidden bg-gradient-to-br from-[#ffd700] to-[#b8860b] rounded-full flex items-center justify-center border-2 border-[#daa520] shadow-lg"
                     style={{
                       transform:
                         state.face === false
@@ -341,14 +329,18 @@ const FlipCoin = () => {
                           : "rotateY(0deg)",
                       transition: "transform 0.6s",
                       backfaceVisibility: "hidden",
+                      boxShadow: "0 0 15px rgba(218, 165, 32, 0.8)", // Golden glow
                     }}
                   >
-                    <span className="text-lg text-purple-100 font-bold">
+                    <span
+                      className="text-lg font-bold"
+                      style={{ color: "#422006" }}
+                    >
                       TAIL
                     </span>
                   </div>
                   <div
-                    className="absolute w-full h-full backface-hidden bg-gradient-to-br from-purple-700 to-purple-900 rounded-full flex items-center justify-center shadow-lg"
+                    className="absolute w-full h-full backface-hidden bg-gradient-to-br from-[#daa520] to-[#ffd700] rounded-full flex items-center justify-center border-2 border-[#daa520] shadow-lg"
                     style={{
                       transform:
                         state.face === true
@@ -356,9 +348,13 @@ const FlipCoin = () => {
                           : "rotateY(0deg)",
                       transition: "transform 0.6s",
                       backfaceVisibility: "hidden",
+                      boxShadow: "0 0 15px rgba(218, 165, 32, 0.8)", // Golden glow
                     }}
                   >
-                    <span className="text-lg text-purple-100 font-bold">
+                    <span
+                      className="text-lg font-bold"
+                      style={{ color: "#422006" }}
+                    >
                       HEAD
                     </span>
                   </div>
@@ -373,11 +369,8 @@ const FlipCoin = () => {
                 <div className="text-purple-200">
                   <p>Choice: {state.face ? "Tails" : "Heads"}</p>
                 </div>
-
-                {/* ... rest of your input fields and button */}
               </div>
 
-              {/* Token Selection and Bet Amount */}
               <div className="flex flex-col w-full">
                 <label
                   htmlFor="token"
@@ -406,7 +399,7 @@ const FlipCoin = () => {
               </div>
 
               <label className="block text-purple-200">
-                Bet amount ({state.tokenAmount}${state.tokenSymbol})
+                Bet amount ({state.tokenSymbol})
               </label>
               <input
                 id="betAmount"
@@ -446,12 +439,12 @@ const FlipCoin = () => {
                         r="10"
                         stroke="currentColor"
                         strokeWidth="4"
-                      ></circle>
+                      />
                       <path
                         className="opacity-75"
                         fill="currentColor"
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
+                      />
                     </svg>
                     <span>
                       {state.isApproving
@@ -460,7 +453,7 @@ const FlipCoin = () => {
                     </span>
                   </div>
                 ) : (
-                  "Flip Coin"
+                  "Flip"
                 )}
               </button>
             </div>
