@@ -58,11 +58,12 @@ const FlipCoin = () => {
       console.log("Address:", userAddress);
       return { signer, contract };
     } catch (error) {
-      // console.error("Error setting up contract with signer:", error.message);
-      console.error(
-        "Error setting up contract with signer:",
-        (error as Error).message
-      );
+      if (error instanceof Error) {
+        console.error("Error setting up contract with signer:", error.message);
+      } else {
+        console.error("Error setting up contract with signer:", error);
+      }
+
       throw error;
     }
   }
@@ -205,6 +206,8 @@ const FlipCoin = () => {
               success: "Flip completed",
               loading: false,
             }));
+
+            setIsFlipping(false);
 
             // Refresh token balance
             fetchTokenBalance();
