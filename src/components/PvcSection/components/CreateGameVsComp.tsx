@@ -1,13 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { SUPPORTED_TOKENS } from "../utils/contract";
 import { useAppKitAccount } from "@reown/appkit/react";
-import {
-  flip,
-  publicProvider,
-  getBetStatus,
-  getGameOutcome,
-} from "../utils/contractfunction";
+import { publicProvider, getGameOutcome } from "../utils/contractfunction";
 import { ethers } from "ethers";
+import { useAppKitProvider } from "@reown/appkit/react";
+import { BrowserProvider } from "ethers";
+import { ABI, ADDRESS } from "../utils/contract";
 
 interface FlipCoin {
   tokenAddress: string;
@@ -22,7 +20,6 @@ interface FlipCoin {
 }
 
 const FlipCoin = () => {
-  const { address, isConnected } = useAppKitAccount();
   const [state, setState] = useState<FlipCoin>({
     face: false,
     tokenAmount: "",
@@ -36,12 +33,104 @@ const FlipCoin = () => {
   });
 
   const [requestId, setRequestId] = useState<string | null>(null);
+  const { address, isConnected } = useAppKitAccount();
+  const { walletProvider } = useAppKitProvider("eip155");
 
   const [isFlipping, setIsFlipping] = useState(false);
   const [flipResult, setFlipResult] = useState<{
     won: boolean | null;
     result: string | null;
   }>({ won: null, result: null });
+
+  // SetupContract
+  async function setupContract() {
+    try {
+      // Check if the user is disconnected
+      if (!isConnected) throw new Error("User is disconnected");
+      const ethersProvider = new BrowserProvider(
+        walletProvider as unknown as ethers.Eip1193Provider
+      );
+      const signer = await ethersProvider.getSigner();
+      const userAddress = await signer.getAddress();
+      console.log("Address:", userAddress);
+      // The Contract object
+      const contract = new ethers.Contract(ADDRESS, ABI, signer);
+      console.log("Address:", userAddress);
+      return { signer, contract };
+    } catch (error) {
+      console.error("Error setting up contract with signer:", error.message);
+      throw error;
+    }
+  }
+  const flip = async (
+    tokenAddress: string,
+    tokenAmount: string,
+    face: boolean
+  ) => {
+    try {
+      const { signer, contract } = await setupContract();
+
+      // Convert betAmount to the correct token decimals
+      const tokenAmountInWei = ethers.parseUnits(tokenAmount, 18);
+
+      // Create token contract instance
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        [
+          "function allowance(address owner, address spender) external view returns (uint256)",
+          "function approve(address spender, uint256 amount) external returns (bool)",
+          "function balanceOf(address owner) external view returns (uint256)",
+        ],
+        signer
+      );
+
+      // Check balance
+      const balance = await tokenContract.balanceOf(await signer.getAddress());
+      if (balance < tokenAmountInWei) {
+        throw new Error("Insufficient token balance");
+      }
+      console.log("Balance:", balance);
+      const approveTx = await tokenContract.approve(ADDRESS, tokenAmountInWei);
+      await approveTx.wait();
+
+      // Send the flip transaction
+      const tx = await contract.flip(face, tokenAddress, tokenAmountInWei);
+
+      const receipt = await tx.wait();
+
+      // Get the requestId from the event
+      const betSentEvent = receipt.logs
+        .map((log: any) => {
+          try {
+            return contract.interface.parseLog(log);
+          } catch (e) {
+            return null;
+          }
+        })
+        .find((event: any) => event && event.name === "BetSent");
+
+      const requestId = betSentEvent ? betSentEvent.args.requestId : null;
+
+      return {
+        receipt,
+        requestId,
+      };
+    } catch (error) {
+      console.error("Error in flip function:", error);
+      throw error;
+    }
+  };
+
+  const getBetStatus = async (requestId: string) => {
+    try {
+      const { contract } = await setupContract();
+      const status = await contract.getBetStatus(requestId);
+      return status;
+    } catch (error) {
+      console.error("Error getting bet status:", error);
+      throw error;
+    }
+  };
 
   // Fetch token balance
   const fetchTokenBalance = useCallback(async () => {

@@ -849,7 +849,7 @@ export const ABI = [
 ];
 
 // src/contracts/FlipGameContract.ts
-export const ADDRESS = "0xDF39025C07813e03C3A5C8596DE99cF8704dE09D";
+export const ADDRESS = "0xf52A34268142237666c4eE6aC264c0AB41CC402B";
 
 // Supported tokens -
 // replace with actual token addresses
