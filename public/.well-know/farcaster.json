@@ -1,0 +1,18 @@
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjIzOTM5NiwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDRENEU1MjIzODRkNkYxMDkwYkZENEM0NTI3YTdkNTJERmQyMGJDYTMifQ",
+    "payload": "eyJkb21haW4iOiJmbGlwLWl0LXRocmVlLnZlcmNlbC5hcHAifQ",
+    "signature": "MHg0OTkzM2UxNzhjMTFkMGExZmQ1YThlOGU3ZTQ1Mzg3MDJiMTA3OWI3Mjc0OWVlN2E2NzMyODA2OTEzODE5MjAwMWM5NTE4ZjQwZWMxOGZlODNiMGVhYTVjYjU0YjYwMGFkODRmNWM3YWUyNGIwZmJhMmVkYTYxYTVkZDA1M2VkNDFj"
+  },
+  "frame": {
+    "version": "1",
+    "name": "Flip It",
+    "iconUrl": "https://flip-it-three.vercel.app/icon.png",
+    "homeUrl": "https://flip-it-three.vercel.app",
+    "imageUrl": "https://flip-it-three.vercel.app/image.png",
+    "buttonTitle": "Flip",
+    "splashImageUrl": "https://flip-it-three.vercel.app/splash.png",
+    "splashBackgroundColor": "#eeccff",
+    "webhookUrl": "https://flip-it-three.vercel.app/api/webhook"
+  }
+}
