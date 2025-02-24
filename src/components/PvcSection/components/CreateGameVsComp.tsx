@@ -87,7 +87,7 @@ const FlipCoin = () => {
       ); // Debug log
       if (contractBalance < requiredBalance) {
         throw new Error(
-          `Contract has insufficient balance: ${ethers.formatUnits(
+          `Treasury has insufficient balance: ${ethers.formatUnits(
             contractBalance,
             18
           )} available, ${ethers.formatUnits(
