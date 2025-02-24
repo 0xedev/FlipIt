@@ -1,10 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { SUPPORTED_TOKENS } from "../utils/contract";
-import {
-  useAppKitAccount,
-  useAppKitProvider,
-  useAppKit,
-} from "@reown/appkit/react";
+import { useAppKitAccount, useAppKitProvider } from "@reown/appkit/react";
 import { publicProvider, getGameOutcome } from "../utils/contractfunction";
 import { ethers } from "ethers";
 import { BrowserProvider } from "ethers";
@@ -39,7 +35,7 @@ const FlipCoin = () => {
   const [requestId, setRequestId] = useState<string | null>(null);
   const { address, isConnected } = useAppKitAccount();
   const { walletProvider } = useAppKitProvider("eip155");
-  const { open } = useAppKit();
+
   const [isFlipping, setIsFlipping] = useState(false);
   const [flipResult, setFlipResult] = useState<{
     won: boolean | null;
@@ -238,11 +234,6 @@ const FlipCoin = () => {
       setState((prev) => ({ ...prev, error: validationError }));
       return;
     }
-
-    if (!isConnected) {
-      await open(); // Prompt wallet connection
-      return;
-    } //chch
 
     setState((prev) => ({
       ...prev,
