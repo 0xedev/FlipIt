@@ -254,7 +254,7 @@ const FlipCoin = () => {
         error instanceof Error
           ? error.message.includes("Token not allowed")
             ? "This token is not allowed for betting"
-            : error.message.includes("Contract has insufficient balance")
+            : error.message.includes("Treasury has insufficient balance")
             ? error.message
             : error.message
           : "Failed to flip coin";
