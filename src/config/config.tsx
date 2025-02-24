@@ -31,8 +31,7 @@ export const wagmiConfig = createConfig({
     walletConnect(WC_PARAMS),
     coinbaseWallet({
       appName: "FlipIt",
-      // CB SDK doesn't pass the parent origin context to their passkey site
-      // Flagged to CB team and can remove UNISWAP_WEB_URL once fixed
+
       appLogoUrl: `https://flip-it-three.vercel.app/${logo}`,
       reloadOnDisconnect: false,
       enableMobileWalletLink: true,
@@ -59,10 +58,10 @@ if (!projectId) {
 }
 
 export const metadata = {
-  name: "AppKit",
-  description: "AppKit Example",
-  url: "https://reown.com", // origin must match your domain & subdomain
-  icons: ["https://avatars.githubusercontent.com/u/179229932"],
+  name: "Flip-it",
+  description: "A coin flip game",
+  url: "https://flip-it-three.vercel.app", // origin must match your domain & subdomain
+  icons: ["https://flip-it-three.vercel.app/icon.png"],
   email: "",
 };
 
