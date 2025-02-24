@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
-import { ABI, ADDRESS } from "./contract";
+import { ABI, ADDRESS } from "../utils/contract";
 
-// Set up provider and contract for public access (read-only)
+// Providers
 export const publicProvider = new ethers.JsonRpcProvider(
   "https://base-mainnet.g.alchemy.com/v2/os5WiDtgiyV3YXhsy2P-Cc0IX5IwFbYy"
 );
@@ -12,29 +12,25 @@ export const fallbackProvider = new ethers.JsonRpcProvider(
 
 export const publicContract = new ethers.Contract(ADDRESS, ABI, publicProvider);
 
-// Function to set up signer and contract for wallet interaction
+// Setup signer and contract
 async function setupContractWithSigner() {
   try {
-    if (window.ethereum) {
-      // Type assertion to tell TypeScript that window.ethereum is Eip1193Provider
-      const provider = new ethers.BrowserProvider(
-        window.ethereum as unknown as ethers.Eip1193Provider
-      );
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(ADDRESS, ABI, signer);
-      return { signer, contract };
-    } else {
+    if (!window.ethereum) {
       throw new Error(
-        "Ethereum provider is not available. Please install a wallet like MetaMask."
+        "Ethereum provider not available. Please install MetaMask."
       );
     }
+    const provider = new ethers.BrowserProvider(window.ethereum as any);
+    const signer = await provider.getSigner();
+    const contract = new ethers.Contract(ADDRESS, ABI, signer);
+    return { signer, contract };
   } catch (error) {
     console.error("Error setting up contract with signer:", error);
     throw error;
   }
 }
 
-// Function to handle contract errors with additional info
+// Handle contract errors
 interface ContractError extends Error {
   code?: string;
   transaction?: any;
@@ -44,9 +40,7 @@ interface ContractError extends Error {
 function handleContractError(error: ContractError) {
   if (error.code === "CALL_EXCEPTION") {
     console.error("Transaction data:", error.transaction);
-    if (error.revert) {
-      console.error("Revert reason:", error.revert);
-    }
+    if (error.revert) console.error("Revert reason:", error.revert);
   } else if (error.code === "ACTION_REJECTED") {
     console.error("User rejected the action:", error);
   } else {
@@ -54,15 +48,13 @@ function handleContractError(error: ContractError) {
   }
 }
 
-// Function to deposit tokens to the treasury
+// Deposit tokens to treasury
 export const depositToTreasury = async (
   tokenAddress: string,
   amount: string
 ): Promise<{ success: boolean; txHash?: string; error?: string }> => {
   try {
     const { signer, contract } = await setupContractWithSigner();
-
-    // Create token contract instance
     const tokenContract = new ethers.Contract(
       tokenAddress,
       [
@@ -72,27 +64,19 @@ export const depositToTreasury = async (
       signer
     );
 
-    // Convert amount to the correct token decimals (18 decimals)
     const amountInWei = ethers.parseUnits(amount, 18);
-
-    // Check balance
     const balance = await tokenContract.balanceOf(await signer.getAddress());
     if (balance.lt(amountInWei)) {
       throw new Error("Insufficient token balance");
     }
 
-    // Approve tokens
     const approveTx = await tokenContract.approve(ADDRESS, amountInWei);
     await approveTx.wait();
 
-    // Call the depositERC20 function
     const depositTx = await contract.depositERC20(tokenAddress, amountInWei);
     const receipt = await depositTx.wait();
 
-    return {
-      success: true,
-      txHash: receipt.transactionHash,
-    };
+    return { success: true, txHash: receipt.transactionHash };
   } catch (error: any) {
     console.error("Error depositing to treasury:", error);
     return {
@@ -102,12 +86,11 @@ export const depositToTreasury = async (
   }
 };
 
-// Function to monitor bet status
+// Get bet status
 export const getBetStatus = async (requestId: string) => {
   try {
     const { contract } = await setupContractWithSigner();
-    const status = await contract.getBetStatus(requestId);
-    return status;
+    return await contract.getBetStatus(requestId);
   } catch (error) {
     console.error("Error getting bet status:", error);
     handleContractError(error as ContractError);
@@ -115,11 +98,11 @@ export const getBetStatus = async (requestId: string) => {
   }
 };
 
+// Get game outcome
 export const getGameOutcome = async (requestId: string) => {
   try {
     const { contract } = await setupContractWithSigner();
-    const outcome = await contract.getGameOutcome(requestId);
-    return outcome;
+    return await contract.getGameOutcome(requestId);
   } catch (error) {
     console.error("Error getting game outcome:", error);
     handleContractError(error as ContractError);
@@ -127,6 +110,7 @@ export const getGameOutcome = async (requestId: string) => {
   }
 };
 
+// Flip function with proper balance check
 export const flip = async (
   tokenAddress: string,
   tokenAmount: string,
@@ -134,11 +118,10 @@ export const flip = async (
 ) => {
   try {
     const { signer, contract } = await setupContractWithSigner();
-
-    // Convert betAmount to the correct token decimals
     const tokenAmountInWei = ethers.parseUnits(tokenAmount, 18);
+    const requiredBalance = tokenAmountInWei * BigInt(2); // Reflects _getPayout(tokenAmount)
 
-    // Create token contract instance
+    // Token contract instance
     const tokenContract = new ethers.Contract(
       tokenAddress,
       [
@@ -149,22 +132,40 @@ export const flip = async (
       signer
     );
 
-    // Check balance
-    const balance = await tokenContract.balanceOf(await signer.getAddress());
-    if (balance < tokenAmountInWei) {
-      throw new Error("Insufficient token balance");
+    // Check contract balance
+    const contractBalance = await tokenContract.balanceOf(ADDRESS);
+    if (contractBalance.lt(requiredBalance)) {
+      throw new Error(
+        `Contract has insufficient balance: ${ethers.formatUnits(
+          contractBalance,
+          18
+        )} tokens available, ${ethers.formatUnits(requiredBalance, 18)} needed`
+      );
     }
 
-    // Approve tokens
-    const approveTx = await tokenContract.approve(ADDRESS, tokenAmountInWei);
-    await approveTx.wait();
+    // Check user balance
+    const userBalance = await tokenContract.balanceOf(
+      await signer.getAddress()
+    );
+    if (userBalance.lt(tokenAmountInWei)) {
+      throw new Error("Insufficient user token balance");
+    }
 
-    // Send the flip transaction
+    // Handle approval
+    const currentAllowance = await tokenContract.allowance(
+      await signer.getAddress(),
+      ADDRESS
+    );
+    if (currentAllowance.lt(tokenAmountInWei)) {
+      const approveTx = await tokenContract.approve(ADDRESS, tokenAmountInWei);
+      await approveTx.wait();
+    }
+
+    // Execute flip transaction
     const tx = await contract.flip(face, tokenAddress, tokenAmountInWei);
-
     const receipt = await tx.wait();
 
-    // Get the requestId from the event
+    // Extract requestId from BetSent event
     const betSentEvent = receipt.logs
       .map((log: any) => {
         try {
@@ -173,17 +174,13 @@ export const flip = async (
           return null;
         }
       })
-      .find((event: any) => event && event.name === "BetSent");
+      .find((event: any) => event?.name === "BetSent");
 
     const requestId = betSentEvent ? betSentEvent.args.requestId : null;
 
-    return {
-      receipt,
-      requestId,
-    };
+    return { receipt, requestId };
   } catch (error) {
     console.error("Error in flip function:", error);
-    handleContractError(error as ContractError);
     throw error;
   }
 };

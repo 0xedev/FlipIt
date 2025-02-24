@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { SUPPORTED_TOKENS } from "../utils/contract";
-import { useAppKitAccount } from "@reown/appkit/react";
+import { useAppKitAccount, useAppKitProvider } from "@reown/appkit/react";
 import { publicProvider, getGameOutcome } from "../utils/contractfunction";
 import { ethers } from "ethers";
-import { useAppKitProvider } from "@reown/appkit/react";
 import { BrowserProvider } from "ethers";
 import { ABI, ADDRESS } from "../utils/contract";
 
-interface FlipCoin {
+interface FlipCoinState {
   tokenAddress: string;
   tokenAmount: string;
   face: boolean;
@@ -20,7 +19,7 @@ interface FlipCoin {
 }
 
 const FlipCoin = () => {
-  const [state, setState] = useState<FlipCoin>({
+  const [state, setState] = useState<FlipCoinState>({
     face: false,
     tokenAmount: "",
     tokenAddress: SUPPORTED_TOKENS.STABLEAI,
@@ -35,34 +34,21 @@ const FlipCoin = () => {
   const [requestId, setRequestId] = useState<string | null>(null);
   const { address, isConnected } = useAppKitAccount();
   const { walletProvider } = useAppKitProvider("eip155");
-
   const [isFlipping, setIsFlipping] = useState(false);
   const [flipResult, setFlipResult] = useState<{
     won: boolean | null;
     result: string | null;
   }>({ won: null, result: null });
 
-  // [Previous logic remains unchanged: setupContract, flip, getBetStatus, fetchTokenBalance, useEffect hooks, handleFlipCoin, validateInput, etc.]
-
   async function setupContract() {
-    try {
-      if (!isConnected) throw new Error("User is disconnected");
-      const ethersProvider = new BrowserProvider(
-        walletProvider as unknown as ethers.Eip1193Provider
-      );
-      const signer = await ethersProvider.getSigner();
-      const userAddress = await signer.getAddress();
-      console.log("Address:", userAddress);
-      const contract = new ethers.Contract(ADDRESS, ABI, signer);
-      return { signer, contract };
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error("Error setting up contract with signer:", error.message);
-        throw error;
-      }
-      console.error("Unknown error setting up contract:", error);
-      throw new Error("Failed to setup contract");
-    }
+    if (!isConnected || !walletProvider)
+      throw new Error("User is disconnected");
+    const ethersProvider = new BrowserProvider(walletProvider as any);
+    const signer = await ethersProvider.getSigner();
+    const userAddress = await signer.getAddress();
+    console.log("Address:", userAddress);
+    const contract = new ethers.Contract(ADDRESS, ABI, signer);
+    return { signer, contract };
   }
 
   const flip = async (
@@ -73,6 +59,7 @@ const FlipCoin = () => {
     try {
       const { signer, contract } = await setupContract();
       const tokenAmountInWei = ethers.parseUnits(tokenAmount, 18);
+      const requiredBalance = tokenAmountInWei * BigInt(2);
 
       const tokenContract = new ethers.Contract(
         tokenAddress,
@@ -84,14 +71,52 @@ const FlipCoin = () => {
         signer
       );
 
+      // Check contract balance
+      const contractBalance = await tokenContract.balanceOf(ADDRESS);
+      console.log(
+        "Contract Balance (raw):",
+        contractBalance,
+        typeof contractBalance
+      ); // Debug log
+      console.log(
+        "Required Balance (raw):",
+        requiredBalance,
+        typeof requiredBalance
+      ); // Debug log
+      if (contractBalance < requiredBalance) {
+        throw new Error(
+          `Contract has insufficient balance: ${ethers.formatUnits(
+            contractBalance,
+            18
+          )} available, ${ethers.formatUnits(
+            requiredBalance,
+            18
+          )} needed. Please contact support to fund the game.`
+        );
+      }
+
+      // Check user balance
       const balance = await tokenContract.balanceOf(await signer.getAddress());
       if (balance < tokenAmountInWei) {
-        throw new Error("Insufficient token balance");
+        throw new Error(`Insufficient ${state.tokenSymbol} balance`);
       }
-      console.log("Balance:", balance);
-      const approveTx = await tokenContract.approve(ADDRESS, tokenAmountInWei);
-      await approveTx.wait();
 
+      // Approval step
+      setState((prev) => ({ ...prev, isApproving: true }));
+      const currentAllowance = await tokenContract.allowance(
+        await signer.getAddress(),
+        ADDRESS
+      );
+      if (currentAllowance < tokenAmountInWei) {
+        const approveTx = await tokenContract.approve(
+          ADDRESS,
+          tokenAmountInWei
+        );
+        await approveTx.wait();
+      }
+      setState((prev) => ({ ...prev, isApproving: false }));
+
+      // Flip transaction
       const tx = await contract.flip(face, tokenAddress, tokenAmountInWei);
       const receipt = await tx.wait();
 
@@ -103,34 +128,19 @@ const FlipCoin = () => {
             return null;
           }
         })
-        .find((event: any) => event && event.name === "BetSent");
+        .find((event: any) => event?.name === "BetSent");
 
       const requestId = betSentEvent ? betSentEvent.args.requestId : null;
-
       return { receipt, requestId };
     } catch (error) {
-      if (error instanceof Error) {
-        console.error("Error in flip function:", error.message);
-        throw error;
-      }
-      console.error("Unknown error in flip function:", error);
-      throw new Error("Failed to flip coin");
+      setState((prev) => ({ ...prev, isApproving: false }));
+      throw error instanceof Error ? error : new Error("Failed to flip coin");
     }
   };
 
   const getBetStatus = async (requestId: string) => {
-    try {
-      const { contract } = await setupContract();
-      const status = await contract.getBetStatus(requestId);
-      return status;
-    } catch (error) {
-      if (error instanceof Error) {
-        console.error("Error getting bet status:", error.message);
-        throw error;
-      }
-      console.error("Unknown error getting bet status:", error);
-      throw new Error("Failed to get bet status");
-    }
+    const { contract } = await setupContract();
+    return await contract.getBetStatus(requestId);
   };
 
   const fetchTokenBalance = useCallback(async () => {
@@ -152,8 +162,8 @@ const FlipCoin = () => {
         tokenContract.symbol(),
       ]);
 
-      setState((prevState) => ({
-        ...prevState,
+      setState((prev) => ({
+        ...prev,
         tokenBalance: ethers.formatUnits(balance, 18),
         tokenSymbol: symbol,
       }));
@@ -168,8 +178,9 @@ const FlipCoin = () => {
 
   const validateInput = (): string | null => {
     if (!isConnected) return "Please connect your wallet";
-    if (!state.tokenAmount || parseFloat(state.tokenAmount) <= 0)
+    if (!state.tokenAmount || parseFloat(state.tokenAmount) <= 0) {
       return "Bet amount must be positive";
+    }
     if (parseFloat(state.tokenBalance) < parseFloat(state.tokenAmount)) {
       return `Insufficient ${state.tokenSymbol} balance`;
     }
@@ -178,31 +189,26 @@ const FlipCoin = () => {
 
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
-
     if (requestId) {
       intervalId = setInterval(async () => {
         try {
           const status = await getBetStatus(requestId);
-
           if (status.fulfilled) {
             clearInterval(intervalId);
             const outcome = await getGameOutcome(requestId);
-
             setFlipResult({
               won: outcome.playerWon,
               result: `You ${outcome.playerWon ? "Won" : "Lost"}. Choice: ${
                 outcome.playerChoice ? "Tails" : "Heads"
               }, Outcome: ${outcome.outcome ? "Tails" : "Heads"}.`,
             });
-
             setState((prev) => ({
               ...prev,
               success: "Game completed",
               loading: false,
             }));
-
             setIsFlipping(false);
-            fetchTokenBalance();
+            fetchTokenBalance(); // Update balance after flip
           }
         } catch (error) {
           clearInterval(intervalId);
@@ -215,7 +221,6 @@ const FlipCoin = () => {
         }
       }, 2000);
     }
-
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
@@ -234,7 +239,6 @@ const FlipCoin = () => {
       error: null,
       success: null,
     }));
-
     setIsFlipping(true);
 
     try {
@@ -244,10 +248,15 @@ const FlipCoin = () => {
         state.face
       );
       setRequestId(newRequestId);
+      fetchTokenBalance(); // Update balance after successful flip initiation
     } catch (error) {
       const errorMessage =
-        error instanceof Error && error.message.includes("Token not allowed")
-          ? "This token is not allowed for betting"
+        error instanceof Error
+          ? error.message.includes("Token not allowed")
+            ? "This token is not allowed for betting"
+            : error.message.includes("Contract has insufficient balance")
+            ? error.message
+            : error.message
           : "Failed to flip coin";
       setState((prev) => ({
         ...prev,
@@ -259,7 +268,7 @@ const FlipCoin = () => {
   };
 
   const handleChoiceClick = () => {
-    setState((prevState) => ({ ...prevState, face: !prevState.face }));
+    setState((prev) => ({ ...prev, face: !prev.face }));
   };
 
   return (
@@ -281,7 +290,9 @@ const FlipCoin = () => {
           <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
             <div className="bg-white p-10 rounded-lg shadow-lg">
               <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-purple-500"></div>
-              <p className="mt-4 text-center">Flipping...</p>
+              <p className="mt-4 text-center">
+                {state.isApproving ? "Approving..." : "Flipping..."}
+              </p>
             </div>
           </div>
         )}
@@ -323,39 +334,37 @@ const FlipCoin = () => {
                   <div
                     className="absolute w-full h-full backface-hidden bg-gradient-to-br from-[#ffd700] to-[#b8860b] rounded-full flex items-center justify-center border-2 border-[#daa520] shadow-lg"
                     style={{
-                      transform:
-                        state.face === false
-                          ? "rotateY(180deg)"
-                          : "rotateY(0deg)",
+                      transform: state.face
+                        ? "rotateY(0deg)"
+                        : "rotateY(180deg)",
                       transition: "transform 0.6s",
                       backfaceVisibility: "hidden",
-                      boxShadow: "0 0 15px rgba(218, 165, 32, 0.8)", // Golden glow
+                      boxShadow: "0 0 15px rgba(218, 165, 32, 0.8)",
                     }}
                   >
                     <span
                       className="text-lg font-bold"
                       style={{ color: "#422006" }}
                     >
-                      TAIL
+                      TAILS
                     </span>
                   </div>
                   <div
                     className="absolute w-full h-full backface-hidden bg-gradient-to-br from-[#daa520] to-[#ffd700] rounded-full flex items-center justify-center border-2 border-[#daa520] shadow-lg"
                     style={{
-                      transform:
-                        state.face === true
-                          ? "rotateY(180deg)"
-                          : "rotateY(0deg)",
+                      transform: state.face
+                        ? "rotateY(180deg)"
+                        : "rotateY(0deg)",
                       transition: "transform 0.6s",
                       backfaceVisibility: "hidden",
-                      boxShadow: "0 0 15px rgba(218, 165, 32, 0.8)", // Golden glow
+                      boxShadow: "0 0 15px rgba(218, 165, 32, 0.8)",
                     }}
                   >
                     <span
                       className="text-lg font-bold"
                       style={{ color: "#422006" }}
                     >
-                      HEAD
+                      HEADS
                     </span>
                   </div>
                 </div>
@@ -447,9 +456,7 @@ const FlipCoin = () => {
                       />
                     </svg>
                     <span>
-                      {state.isApproving
-                        ? "Approving Token..."
-                        : "Processing..."}
+                      {state.isApproving ? "Approving..." : "Flipping..."}
                     </span>
                   </div>
                 ) : (
