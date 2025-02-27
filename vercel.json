@@ -1,8 +1,15 @@
 {
+  "headers": [
+    {
+      "source": "/.well-known/farcaster.json",
+      "headers": [{ "key": "Content-Type", "value": "application/json" }]
+    }
+  ],
+  "redirects": [],
   "rewrites": [
     {
       "source": "/.well-known/farcaster.json",
-      "destination": "/public/.well-known/farcaster.json"
+      "destination": "/.well-known/farcaster.json"
     },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
