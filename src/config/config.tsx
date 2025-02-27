@@ -23,33 +23,8 @@ const WC_PARAMS = {
   },
 };
 
-// export const wagmiConfig = createConfig({
-//   chains: [base],
-//   connectors: [
-//     farcasterFrame(),
-//     // injected(),
-//     // walletConnect(WC_PARAMS),
-//     // coinbaseWallet({
-//     //   appName: "FlipIt",
-
-//     //   appLogoUrl: `https://flip-it-three.vercel.app/${logo}`,
-//     //   reloadOnDisconnect: false,
-//     //   enableMobileWalletLink: true,
-//     // }),
-//     // safe(),
-//   ],
-//   client({ chain }) {
-//     return createClient({
-//       chain,
-//       batch: { multicall: true },
-//       pollingInterval: 12_000,
-//       transport: http(chain.rpcUrls.default.http[0]), // Corrected this line
-//     });
-//   },
-// });
 export const wagmiConfig = createConfig({
   chains: [base],
-  connectors: [farcasterFrame()],
   connectors: [
     farcasterFrame(),
     injected(),
@@ -66,12 +41,13 @@ export const wagmiConfig = createConfig({
   client({ chain }) {
     return createClient({
       chain,
-      transport: http(
-        "https://base-mainnet.g.alchemy.com/v2/os5WiDtgiyV3YXhsy2P-Cc0IX5IwFbYy"
-      ),
+      batch: { multicall: true },
+      pollingInterval: 12_000,
+      transport: http(chain.rpcUrls.default.http[0]), // Corrected this line
     });
   },
 });
+
 export const queryClient = new QueryClient();
 
 // Get projectId from https://cloud.reown.com

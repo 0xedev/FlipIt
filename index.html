@@ -2,26 +2,26 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta property="og:title" content="Flip-it" />
-    <meta property="og:image" content="https://example.com/coin.png" />
-    <meta property="fc:frame" content="vNext" />
-    <meta property="fc:frame:image" content="https://example.com/coin.png" />
-    <meta property="fc:frame:button:1" content="Heads" />
-    <meta property="fc:frame:button:1:action" content="post" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
-      property="fc:frame:button:1:target"
-      content="https://flip-it-three.vercel.app/api/flip"
-    />
-    <meta property="fc:frame:button:2" content="Tails" />
-    <meta property="fc:frame:button:2:action" content="post" />
-    <meta
-      property="fc:frame:button:2:target"
-      content="https://flip-it-three.vercel.app/api/flip"
+      name="fc:frame"
+      content='{
+        "version": "next",
+        "imageUrl": "https://as2.ftcdn.net/jpg/03/69/43/69/220_F_369436902_IOgNshQi3JSdTRurt9u9ujEdO4LwZoyi.jpg",
+        "button":{
+          "title": "Flip-it",
+          "action": {
+            "type": "launch_frame",
+            "name": "FlipIt",
+            "url": "https://flip-it-three.vercel.app/",
+            "splashImageUrl": "https://unsplash.com/photos/a-bunch-of-balloons-that-are-shaped-like-email-7NT4EDSI5Ok",
+            "splashBackgroundColor": "#eeccff"
+          }
+        }
+      }'
+      data-rh="true"
     />
     <title>Flip-it</title>
   </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
 </html>
